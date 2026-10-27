@@ -8,18 +8,17 @@ st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets trực tiếp bằng thông tin cấu hình tường minh từ st.secrets
+# Kết nối Google Sheets an toàn & chuẩn hóa
 @st.cache_resource
 def init_connection():
     secrets = st.secrets["connections"]["gsheets"]
     
-    # Định nghĩa các quyền truy cập Google Sheets & Drive
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Xây dựng tường minh từ điển thông tin tài khoản dịch vụ
+    # Lấy thông tin xác thực tài khoản dịch vụ
     creds_info = {
         "type": secrets.get("type", "service_account"),
         "project_id": secrets.get("project_id"),
@@ -33,17 +32,12 @@ def init_connection():
         "client_x509_cert_url": secrets.get("client_x509_cert_url")
     }
     
-    # Xác thực qua Google OAuth2 Credentials
     credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
     gc = gspread.authorize(credentials)
     
     spreadsheet_url = secrets.get("spreadsheet")
-    if spreadsheet_url:
-        spreadsheet = gc.open_by_url(spreadsheet_url)
-    else:
-        spreadsheet = gc.open("TroLy_NhacViec_Database")
-        
-    return spreadsheet.worksheet("Sheet1")
+    spreadsheet = gc.open_by_url(spreadsheet_url)
+    return spreadsheet.sheet1
 
 sheet = init_connection()
 
@@ -70,31 +64,26 @@ with st.form("task_form", clear_on_submit=True):
 
 if submit:
     if task_name.strip():
-        # Tạo dòng dữ liệu mới
+        # 1. Thêm dòng mới vào Google Sheets
         new_id = len(df) + 1 if not df.empty else 1
-        new_row_data = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
+        new_row = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
+        sheet.append_row(new_row)
         
-        # Thêm trực tiếp dòng mới vào Google Sheets
-        sheet.append_row(new_row_data)
-        
-        # Tải lại dữ liệu
+        # Tải lại bảng dữ liệu
         df = load_data()
         
-        # Tạo link Google Calendar Quick Add
+        # 2. Tạo đường link đồng bộ Google Calendar
         start_dt = datetime.combine(task_date, task_time)
         start_str = start_dt.strftime("%Y%m%dT%H%M00")
-        
-        cal_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={task_name}&dates={start_str}/{start_str}&details=Nhắc+nhở+từ+Trợ+Lý+Nhắc+Việc+Cá+Nhân"
+        cal_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={task_name}&dates={start_str}/{start_str}&details=Nhắc+nhở+từ+Trợ+Lý+Nhắc+Việc"
         
         st.success("✅ Đã lưu công việc vào Google Sheets thành công!")
         
-        # Hiển thị nút bấm đồng bộ lịch
+        # Hiển thị nút bấm đồng bộ lịch điện thoại
         st.markdown(
             f'<a href="{cal_url}" target="_blank" style="display: inline-block; padding: 0.75em 1em; background-color: #4285F4; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; text-align: center; width: 100%;">📅 Bấm vào đây để đồng bộ lịch báo thức lên Điện Thoại ngay!</a>',
             unsafe_allow_html=True
         )
-        st.info("💡 Mẹo: Khi bấm vào nút trên, ứng dụng Lịch trên điện thoại sẽ tự động mở ra, bạn chỉ cần bấm **Lưu** là điện thoại sẽ tự động hẹn giờ báo thức chính xác!")
-        
     else:
         st.warning("⚠️ Vui lòng nhập nội dung công việc!")
 
