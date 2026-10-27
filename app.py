@@ -1,19 +1,36 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import gspread
 
 st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="⏰", layout="centered")
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets bằng st-gsheets-connection chuẩn
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Kết nối Google Sheets trực tiếp bằng gspread và xử lý tách URL an toàn tuyệt đối
+@st.cache_resource
+def init_connection():
+    secrets_dict = dict(st.secrets["connections"]["gsheets"])
+    # Tách URL spreadsheet ra khỏi từ điển credentials để Google Auth không bị lỗi MalformedError
+    spreadsheet_url = secrets_dict.pop("spreadsheet", None)
+    
+    gc = gspread.service_account_from_dict(secrets_dict)
+    
+    if spreadsheet_url:
+        spreadsheet = gc.open_by_url(spreadsheet_url)
+    else:
+        spreadsheet = gc.open("TroLy_NhacViec_Database")
+        
+    return spreadsheet.worksheet("Sheet1")
+
+sheet = init_connection()
 
 def load_data():
     try:
-        spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        return conn.read(spreadsheet=spreadsheet_url, worksheet="Sheet1", ttl="0s")
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
+        return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
 
@@ -31,24 +48,15 @@ with st.form("task_form", clear_on_submit=True):
 
 if submit:
     if task_name.strip():
-        # 1. Lưu vào Google Sheets
+        # Tạo dòng dữ liệu mới
         new_id = len(df) + 1 if not df.empty else 1
-        new_row = pd.DataFrame([{
-            "ID": new_id,
-            "Nội dung": task_name,
-            "Ngày": str(task_date),
-            "Giờ": str(task_time),
-            "Trạng thái": "Chưa xong"
-        }])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
+        new_row_data = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
         
-        # Cập nhật dữ liệu với đầy đủ tham số định danh spreadsheet và worksheet
-        spreadsheet_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        conn.update(
-            spreadsheet=spreadsheet_url,
-            worksheet="Sheet1",
-            data=updated_df
-        )
+        # Thêm trực tiếp dòng mới vào Google Sheets bằng gspread
+        sheet.append_row(new_row_data)
+        
+        # Tải lại dữ liệu
+        df = load_data()
         
         # 2. Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
@@ -66,7 +74,7 @@ if submit:
         st.info("💡 Mẹo: Khi bấm vào nút trên, ứng dụng Lịch trên điện thoại sẽ tự động mở ra, bạn chỉ cần bấm **Lưu** là điện thoại sẽ tự động hẹn giờ báo thức chính xác!")
         
     else:
-        st.warning("⚠️ Vui lòng nhập nội dung công việc!")
+        st.warning("⚠️ VuserInputnhập nội dung công việc!")
 
 st.divider()
 st.subheader("📋 Danh sách công việc đã lưu")
