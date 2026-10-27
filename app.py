@@ -2,23 +2,42 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread
+from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Infomation", page_icon="⏰", layout="centered")
+st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="⏰", layout="centered")
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets trực tiếp bằng gspread và chuẩn hóa private_key
+# Kết nối Google Sheets trực tiếp bằng thông tin cấu hình tường minh từ st.secrets
 @st.cache_resource
 def init_connection():
-    secrets_dict = dict(st.secrets["connections"]["gsheets"])
-    spreadsheet_url = secrets_dict.pop("spreadsheet", None)
+    secrets = st.secrets["connections"]["gsheets"]
     
-    # Chuẩn hóa ký tự xuống dòng trong private_key để tránh lỗi MalformedError
-    if "private_key" in secrets_dict:
-        secrets_dict["private_key"] = secrets_dict["private_key"].replace("\\n", "\n")
-        
-    gc = gspread.service_account_from_dict(secrets_dict)
+    # Định nghĩa các quyền truy cập Google Sheets & Drive
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     
+    # Xây dựng tường minh từ điển thông tin tài khoản dịch vụ
+    creds_info = {
+        "type": secrets.get("type", "service_account"),
+        "project_id": secrets.get("project_id"),
+        "private_key_id": secrets.get("private_key_id"),
+        "private_key": secrets.get("private_key", "").replace("\\n", "\n"),
+        "client_email": secrets.get("client_email"),
+        "client_id": secrets.get("client_id"),
+        "auth_uri": secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+        "token_uri": secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+        "auth_provider_x509_cert_url": secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+        "client_x509_cert_url": secrets.get("client_x509_cert_url")
+    }
+    
+    # Xác thực qua Google OAuth2 Credentials
+    credentials = Credentials.from_service_account_info(creds_info, scopes=scopes)
+    gc = gspread.authorize(credentials)
+    
+    spreadsheet_url = secrets.get("spreadsheet")
     if spreadsheet_url:
         spreadsheet = gc.open_by_url(spreadsheet_url)
     else:
@@ -55,7 +74,7 @@ if submit:
         new_id = len(df) + 1 if not df.empty else 1
         new_row_data = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
         
-        # Thêm trực tiếp dòng mới vào Google Sheets bằng gspread
+        # Thêm trực tiếp dòng mới vào Google Sheets
         sheet.append_row(new_row_data)
         
         # Tải lại dữ liệu
