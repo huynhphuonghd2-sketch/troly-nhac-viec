@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from google.oauth2.service_account import Credentials
 import gspread
@@ -12,7 +12,7 @@ st.set_page_config(
     page_title="Trợ Lý Nhắc Việc", page_icon="📅", layout="centered"
 )
 
-st.title("📅 Trợ Lý Nhắc Việc & Đồng Bộ Lịch")
+st.title("📅 TRỢ LÝ CỦA THẮNG")
 
 
 # Hàm kết nối Google Sheets bảo mật bằng gspread
@@ -34,15 +34,16 @@ def init_connection():
 try:
   sheet = init_connection()
 except Exception as e:
-  st.error(
-      f"Lỗi kết nối Google Sheets: {e}. Vui lòng kiểm tra lại Secrets và quyền"
-      " Share file cho Service Account!"
-  )
+  st.error(f"Lỗi kết nối Google Sheets: {e}")
   st.stop()
 
 # Form nhập liệu công việc
 st.subheader("📝 Nội dung công việc cần làm:")
-task_content = st.text_input("Nhập nội dung công việc", label_visibility="collapsed", placeholder="Ví dụ: Họp triển khai vận tải...")
+task_content = st.text_input(
+    "Nhập nội dung công việc",
+    label_visibility="collapsed",
+    placeholder="Ví dụ: Họp triển khai vận tải...",
+)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -55,7 +56,6 @@ if st.button("🚀 Lưu Lịch & Tạo Thông Báo Điện Thoại", type="prima
     st.warning("Vui lòng nhập nội dung công việc!")
   else:
     try:
-      # Lấy dữ liệu hiện tại để tính ID tiếp theo
       all_records = sheet.get_all_records()
       next_id = len(all_records) + 1
 
@@ -66,7 +66,7 @@ if st.button("🚀 Lưu Lịch & Tạo Thông Báo Điện Thoại", type="prima
       sheet.append_row([next_id, task_content, date_str, time_str, "Chưa xong"])
       st.success("Đã lưu công việc vào Google Sheets thành công!")
 
-      # Tạo link đồng bộ Google Calendar cho điện thoại
+      # Tạo link đồng bộ Google Calendar
       start_dt = vietnam_tz.localize(
           datetime.combine(selected_date, selected_time)
       )
