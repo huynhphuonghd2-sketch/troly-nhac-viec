@@ -12,7 +12,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        return conn.read(ttl="0s")
+        return conn.read(worksheet="Sheet1", ttl="0s")
     except Exception:
         return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
 
@@ -40,7 +40,9 @@ if submit:
             "Trạng thái": "Chưa xong"
         }])
         updated_df = pd.concat([df, new_row], ignore_index=True)
-        conn.update(data=updated_df)
+        
+        # Cập nhật dữ liệu kèm theo chỉ định worksheet="Sheet1"
+        conn.update(worksheet="Sheet1", data=updated_df)
         
         # 2. Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
