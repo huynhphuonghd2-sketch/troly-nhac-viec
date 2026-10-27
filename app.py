@@ -1,18 +1,30 @@
 import streamlit as st
-from st_gsheets_connection import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import gspread
 
 st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="⏰", layout="centered")
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets lưu dữ liệu
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Kết nối Google Sheets trực tiếp qua gspread sử dụng Secrets của Streamlit
+@st.cache_resource
+def init_connection():
+    # Lấy thông tin từ st.secrets (được cấu hình sẵn trên Streamlit Cloud)
+    creds_dict = dict(st.secrets["connections"]["gsheets"])
+    gc = gspread.service_account_from_dict(creds_dict)
+    # Mở file Google Sheets tên 'TroLy_NhacViec_Database'
+    spreadsheet = gc.open("TroLy_NhacViec_Database")
+    return spreadsheet.sheet1
+
+sheet = init_connection()
 
 def load_data():
     try:
-        return conn.read(ttl="0s")
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
+        return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
 
@@ -30,16 +42,14 @@ with st.form("task_form", clear_on_submit=True):
 
 if submit:
     if task_name.strip():
-        # 1. Lưu vào Google Sheets
-        new_row = pd.DataFrame([{
-            "ID": len(df) + 1,
-            "Nội dung": task_name,
-            "Ngày": str(task_date),
-            "Giờ": str(task_time),
-            "Trạng thái": "Chưa xong"
-        }])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
-        conn.update(data=updated_df)
+        new_id = len(df) + 1
+        new_row = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
+        
+        # Thêm dòng mới trực tiếp vào Google Sheets
+        sheet.append_row(new_row)
+        
+        # Tải lại dữ liệu mới nhất
+        df = load_data()
         
         # 2. Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
