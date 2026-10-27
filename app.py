@@ -7,12 +7,12 @@ st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets qua st-gsheets-connection
+# Kết nối Google Sheets bằng st-gsheets-connection chuẩn
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        return conn.read(worksheet="Sheet1", ttl="0s")
+        return conn.read(ttl="0s")
     except Exception:
         return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
 
@@ -30,7 +30,7 @@ with st.form("task_form", clear_on_submit=True):
 
 if submit:
     if task_name.strip():
-        # Tạo dòng dữ liệu mới chuẩn DataFrame
+        # 1. Lưu vào Google Sheets
         new_id = len(df) + 1 if not df.empty else 1
         new_row = pd.DataFrame([{
             "ID": new_id,
@@ -39,18 +39,10 @@ if submit:
             "Giờ": str(task_time),
             "Trạng thái": "Chưa xong"
         }])
-        
-        # Nối dữ liệu mới vào bảng hiện tại và ghi trực tiếp
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
-        # Sử dụng gspread client từ connection để append dòng an toàn tuyệt đối
-        client = conn.client
-        spreadsheet = client.open("TroLy_NhacViec_Database")
-        worksheet = spreadsheet.worksheet("Sheet1")
-        worksheet.append_row([new_id, task_name, str(task_date), str(task_time), "Chưa xong"])
-        
-        # Tải lại dữ liệu
-        df = load_data()
+        # Cập nhật dữ liệu trực tiếp bằng phương thức chuẩn
+        conn.update(data=updated_df)
         
         # 2. Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
