@@ -1,18 +1,44 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import gspread
 
 st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="⏰", layout="centered")
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets bằng st-gsheets-connection chuẩn
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Kết nối Google Sheets trực tiếp qua gspread (đã lọc sạch các khóa phụ để tránh lỗi)
+@st.cache_resource
+def init_connection():
+    secrets = dict(st.secrets["connections"]["gsheets"])
+    spreadsheet_url = secrets.get("spreadsheet")
+    
+    # Chỉ giữ lại các trường tài khoản dịch vụ chuẩn của Google
+    sa_keys = [
+        "type", "project_id", "private_key_id", "private_key", 
+        "client_email", "client_id", "auth_uri", "token_uri", 
+        "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"
+    ]
+    creds_dict = {k: secrets[k] for k in sa_keys if k in secrets}
+    
+    gc = gspread.service_account_from_dict(creds_dict)
+    
+    # Mở file Google Sheets bằng URL hoặc tên
+    if spreadsheet_url:
+        spreadsheet = gc.open_by_url(spreadsheet_url)
+    else:
+        spreadsheet = gc.open("TroLy_NhacViec_Database")
+        
+    return spreadsheet.sheet1
+
+sheet = init_connection()
 
 def load_data():
     try:
-        return conn.read(worksheet="Sheet1", ttl="0s")
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
+        return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame(columns=["ID", "Nội dung", "Ngày", "Giờ", "Trạng thái"])
 
@@ -30,21 +56,16 @@ with st.form("task_form", clear_on_submit=True):
 
 if submit:
     if task_name.strip():
-        # 1. Lưu vào Google Sheets
         new_id = len(df) + 1 if not df.empty else 1
-        new_row = pd.DataFrame([{
-            "ID": new_id,
-            "Nội dung": task_name,
-            "Ngày": str(task_date),
-            "Giờ": str(task_time),
-            "Trạng thái": "Chưa xong"
-        }])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
+        new_row = [new_id, task_name, str(task_date), str(task_time), "Chưa xong"]
         
-        # Cập nhật dữ liệu kèm theo chỉ định worksheet="Sheet1"
-        conn.update(worksheet="Sheet1", data=updated_df)
+        # Thêm trực tiếp dòng mới vào Google Sheets
+        sheet.append_row(new_row)
         
-        # 2. Tạo link Google Calendar Quick Add
+        # Tải lại dữ liệu
+        df = load_data()
+        
+        # Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
         start_str = start_dt.strftime("%Y%m%dT%H%M00")
         
