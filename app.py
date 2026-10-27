@@ -3,17 +3,20 @@ import pandas as pd
 from datetime import datetime
 import gspread
 
-st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Minh", page_icon="⏰", layout="centered")
+st.set_page_config(page_title="Trợ Lý Nhắc Việc Thông Infomation", page_icon="⏰", layout="centered")
 
 st.title("🤖 Trợ Lý Nhắc Việc Cá Nhân (Calendar Edition)")
 
-# Kết nối Google Sheets trực tiếp bằng gspread và xử lý tách URL an toàn tuyệt đối
+# Kết nối Google Sheets trực tiếp bằng gspread và chuẩn hóa private_key
 @st.cache_resource
 def init_connection():
     secrets_dict = dict(st.secrets["connections"]["gsheets"])
-    # Tách URL spreadsheet ra khỏi từ điển credentials để Google Auth không bị lỗi MalformedError
     spreadsheet_url = secrets_dict.pop("spreadsheet", None)
     
+    # Chuẩn hóa ký tự xuống dòng trong private_key để tránh lỗi MalformedError
+    if "private_key" in secrets_dict:
+        secrets_dict["private_key"] = secrets_dict["private_key"].replace("\\n", "\n")
+        
     gc = gspread.service_account_from_dict(secrets_dict)
     
     if spreadsheet_url:
@@ -58,7 +61,7 @@ if submit:
         # Tải lại dữ liệu
         df = load_data()
         
-        # 2. Tạo link Google Calendar Quick Add
+        # Tạo link Google Calendar Quick Add
         start_dt = datetime.combine(task_date, task_time)
         start_str = start_dt.strftime("%Y%m%dT%H%M00")
         
@@ -74,7 +77,7 @@ if submit:
         st.info("💡 Mẹo: Khi bấm vào nút trên, ứng dụng Lịch trên điện thoại sẽ tự động mở ra, bạn chỉ cần bấm **Lưu** là điện thoại sẽ tự động hẹn giờ báo thức chính xác!")
         
     else:
-        st.warning("⚠️ VuserInputnhập nội dung công việc!")
+        st.warning("⚠️ Vui lòng nhập nội dung công việc!")
 
 st.divider()
 st.subheader("📋 Danh sách công việc đã lưu")
